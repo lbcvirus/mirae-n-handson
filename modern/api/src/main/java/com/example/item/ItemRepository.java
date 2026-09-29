@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ItemRepository extends JpaRepository<Item, Integer> {
+public interface ItemRepository extends JpaRepository<Item, Integer>, ItemSearchRepository {
 
     /** 단건 조회 — 단원 · 태그를 함께 가져온다(OSIV 꺼져 있음). */
     @EntityGraph(attributePaths = {"unit", "tags"})

@@ -3,6 +3,7 @@ package com.example.item;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Map;
 import org.hibernate.Hibernate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -79,5 +80,65 @@ class ItemRepositoryTest {
         assertThat(itemRepository.countByUnitIdAndStatus(fraction.getId(), ItemStatus.ACTIVE)).isEqualTo(3);
         assertThat(itemRepository.countByUnitIdAndStatus(fraction.getId(), ItemStatus.DELETED)).isEqualTo(1);
         assertThat(unitRepository.findByCode("M5-3")).isPresent();
+    }
+
+    private static ItemSearchCondition condition(String query) {
+        return ItemSearchCondition.from(LegacyQueryParams.parse(query));
+    }
+
+    private List<String> searchTitles(String query) {
+        ItemSearchCondition condition = condition(query);
+        return itemRepository.findPublicItems(condition, condition.offset(), ItemSearchCondition.PAGE_SIZE).stream()
+            .map(ItemSearchRow::title)
+            .toList();
+    }
+
+    @Test
+    @DisplayName("검색 기본: 공개 문항 중 난이도 5 를 뺀 문항, level DESC · id ASC")
+    void searchDefaultExcludesLevelFiveAndNonActive() {
+        assertThat(itemRepository.countPublicItems(condition(null))).isEqualTo(3);
+        assertThat(searchTitles(null)).containsExactly("분수 문장제", "분모가 같은 분수의 덧셈", "소수 곱셈");
+    }
+
+    @Test
+    @DisplayName("검색 조건은 AND: 키워드(제목 · 지문) + 단원 + 태그 정확 일치")
+    void searchCombinesConditions() {
+        String query = "q=%EB%B6%84%EC%88%98&unit=M5-1&tag=%EB%AC%B8%EC%9E%A5%EC%A0%9C";
+
+        assertThat(itemRepository.countPublicItems(condition(query))).isEqualTo(1);
+        assertThat(searchTitles(query)).containsExactly("분수 문장제");
+    }
+
+    @Test
+    @DisplayName("검색 난이도 지정: 5 도 찾고, 검수중 · 삭제 문항은 빠진다. 없는 단원은 0건")
+    void searchByLevelAndUnknownUnit() {
+        assertThat(searchTitles("level=5")).containsExactly("난이도 5 분수");
+        assertThat(searchTitles("level=3")).isEmpty();
+        assertThat(itemRepository.countPublicItems(condition("unit=Z9-99"))).isZero();
+    }
+
+    @Test
+    @DisplayName("검색 정렬 · 페이지: unit 정렬의 2차 정렬은 level DESC, 마지막 쪽 너머는 빈 행")
+    void searchSortsAndPages() {
+        assertThat(searchTitles("sort=unit&dir=desc"))
+            .containsExactly("소수 곱셈", "분수 문장제", "분모가 같은 분수의 덧셈");
+        assertThat(searchTitles("sort=title")).containsExactly("분모가 같은 분수의 덧셈", "분수 문장제", "소수 곱셈");
+        assertThat(searchTitles("page=2")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findTagNamesByItemIds: 문항별 태그 이름을 태그 id 순으로, 태그 없는 문항은 키 없음")
+    void findsTagNamesInTagIdOrder() {
+        ItemSearchCondition condition = condition(null);
+        List<ItemSearchRow> rows = itemRepository.findPublicItems(condition, 0, ItemSearchCondition.PAGE_SIZE);
+        Integer wordItemId = rows.get(0).id();
+        Integer noTagItemId = rows.get(2).id();
+
+        Map<Integer, List<String>> tags =
+            itemRepository.findTagNamesByItemIds(rows.stream().map(ItemSearchRow::id).toList());
+
+        assertThat(tags.get(wordItemId)).containsExactly("계산", "문장제");
+        assertThat(tags).doesNotContainKey(noTagItemId);
+        assertThat(itemRepository.findTagNamesByItemIds(List.of())).isEmpty();
     }
 }
