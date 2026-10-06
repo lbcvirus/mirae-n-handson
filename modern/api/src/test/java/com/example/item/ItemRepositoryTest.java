@@ -141,4 +141,38 @@ class ItemRepositoryTest {
         assertThat(tags).doesNotContainKey(noTagItemId);
         assertThat(itemRepository.findTagNamesByItemIds(List.of())).isEmpty();
     }
+
+    @Test
+    @DisplayName("검색 created 정렬: 방향이 없으면 최신순, asc 면 오래된 순, 등록 시각이 같으면 어느 방향이든 id ASC")
+    void searchSortsByCreatedAt() {
+        Unit multiply = entityManager.persist(ItemFixtures.unit(2, "M5-2", "분수의 곱셈", 5));
+        entityManager.persist(ItemFixtures.item(
+            null, multiply, "최근 문항 A", 2, ItemStatus.ACTIVE, ItemFixtures.SEED_TIME.plusDays(1)));
+        entityManager.persist(ItemFixtures.item(
+            null, multiply, "오래된 문항", 3, ItemStatus.ACTIVE, ItemFixtures.SEED_TIME.minusDays(1)));
+        entityManager.persist(ItemFixtures.item(
+            null, multiply, "최근 문항 B", 1, ItemStatus.ACTIVE, ItemFixtures.SEED_TIME.plusDays(1)));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(searchTitles("unit=M5-2&sort=created"))
+            .containsExactly("최근 문항 A", "최근 문항 B", "오래된 문항");
+        assertThat(searchTitles("unit=M5-2&sort=created&dir=desc"))
+            .containsExactly("최근 문항 A", "최근 문항 B", "오래된 문항");
+        assertThat(searchTitles("unit=M5-2&sort=created&dir=asc"))
+            .containsExactly("오래된 문항", "최근 문항 A", "최근 문항 B");
+    }
+
+    @Test
+    @DisplayName("검색 id · level · title 정렬 방향과 지문(stem) 키워드 일치가 실제 쿼리에서 동작한다")
+    void searchSortsByIdLevelTitleAndMatchesStem() {
+        assertThat(searchTitles("sort=id&dir=desc"))
+            .containsExactly("소수 곱셈", "분수 문장제", "분모가 같은 분수의 덧셈");
+        assertThat(searchTitles("sort=level&dir=asc"))
+            .containsExactly("소수 곱셈", "분모가 같은 분수의 덧셈", "분수 문장제");
+        assertThat(searchTitles("sort=title&dir=desc"))
+            .containsExactly("소수 곱셈", "분수 문장제", "분모가 같은 분수의 덧셈");
+        // 지문은 "<제목> 문제 본문" 이라 제목에 없는 단어로도 찾는다
+        assertThat(itemRepository.countPublicItems(condition("q=%EB%B3%B8%EB%AC%B8"))).isEqualTo(3);
+    }
 }

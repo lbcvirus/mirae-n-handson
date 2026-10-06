@@ -11,6 +11,7 @@ argument-hint: "[diff 범위 | patch 파일 경로] (생략하면 upstream/main.
 - 인자가 비어 있으면 `git diff upstream/main...HEAD` 를 대상으로 삼는다.
 - 인자가 `.patch` 파일이면 적용하지 않고 `git apply --stat <파일>` 과 파일 내용으로 읽는다.
 - 절차는 저장소 루트의 `templates/verification-loop.md` 를, 판정 항목과 심각도 정의는 저장소 루트의 `templates/approval-checklist.md` 를 따른다. 체크리스트 항목은 여기 옮겨 적지 않고 매번 그 파일을 읽는다.
+- reviewer 또는 tester Sub-agent 가 없는 환경에서는 해당 단계(3 · 4단계)를 기존 방식대로 메인 세션이 직접 수행한다.
 
 ## 1. 요청 범위 확인
 
@@ -24,13 +25,19 @@ argument-hint: "[diff 범위 | patch 파일 경로] (생략하면 upstream/main.
 
 ## 3. 체크리스트 대조
 
-1. 저장소 루트의 `templates/approval-checklist.md` 를 읽는다.
-2. 항목마다 충족 · 미충족 · 확인 필요 중 하나로 표시한다.
-3. 컨벤션 기준은 팀 `CLAUDE.md` 와 대조한다. `convention-check` Skill 이 있으면 그 결과를 쓴다.
+메인 세션이 직접 하지 않고 reviewer Sub-agent 에 위임한다.
+
+1. reviewer 에게 비교 범위(검증 대상 diff 범위 또는 patch 파일 경로)와 1단계의 요청 문장을 그대로 넘긴다.
+2. reviewer 가 저장소 루트의 `templates/approval-checklist.md` 를 읽고, 항목마다 충족 · 미충족 · 확인 필요 중 하나로 표시하게 한다.
+3. 컨벤션 기준은 팀 `CLAUDE.md` 와 대조하게 한다. `convention-check` Skill 이 있으면 그 결과를 쓰게 한다.
 
 ## 4. 테스트 실행
 
-변경된 폴더의 테스트만 실행한다.
+메인 세션이 직접 하지 않고 tester Sub-agent 에 위임한다.
+
+1. tester 에게 비교 범위와 요청 문장을 넘기고, 아래 표에 따라 변경된 폴더의 테스트만 실행하게 한다.
+2. 새 로직(새 public 서비스 메서드 · 새 엔드포인트)에 테스트가 없으면 tester 가 테스트 파일을 추가한 뒤 실행하게 한다.
+3. 실행 명령, 통과 · 실패 수, 실패한 테스트 이름, 추가한 테스트 파일 목록을 돌려받는다.
 
 | 변경된 폴더 | 명령 |
 |---|---|
@@ -44,6 +51,8 @@ argument-hint: "[diff 범위 | patch 파일 경로] (생략하면 upstream/main.
 
 ## 5. 승인 기준 판정
 
+- reviewer 와 tester 의 보고를 모두 받은 뒤, 네 기준 모두를 메인 세션이 최종 판정한다.
+- 두 보고가 엇갈리면(예: reviewer 는 테스트 누락이라 했는데 tester 는 해당 테스트가 있다고 보고) 엇갈린 지점을 그대로 적고 사람에게 묻는다.
 - 네 기준(테스트 통과 / 치명 이슈 0건 / 요청 범위 이탈 없음 / 컨벤션 준수)을 하나씩 판정한다. 하나라도 미충족이면 반려.
 - 치명 · 경고 · 제안의 구분은 `templates/approval-checklist.md` 의 심각도 정의를 따른다.
 - 이슈가 0건이면 경고 · 제안 수준까지 한 번 더 본다.
@@ -74,7 +83,7 @@ argument-hint: "[diff 범위 | patch 파일 경로] (생략하면 upstream/main.
 
 ## 7. 하지 말 것
 
-- 코드를 수정하지 않는다. 판정과 수정 방향만 보고한다.
+- 코드를 수정하지 않는다(tester 가 추가하는 테스트 파일은 예외). 판정과 수정 방향만 보고한다.
 - 근거 줄번호를 댈 수 없는 지적은 이슈로 올리지 않고 "확인 필요"로 남긴다.
 - 테스트를 실행하지 않고 통과했다고 쓰지 않는다.
 - patch 파일을 적용하지 않는다. `characterization/` 의 테스트 코드와 스냅샷을 고치거나 `-u` 로 다시 찍지 않는다.
